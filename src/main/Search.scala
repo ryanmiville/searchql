@@ -15,6 +15,8 @@ enum Operator:
 
 type FieldName = String
 
+type FieldValue = String | Int | Double
+
 object Search:
   def parse(query: String): Either[Parser.Error, Search] =
     parser.parseAll(query)
@@ -35,22 +37,25 @@ object Search:
           case "<=" => Operator.Lteq
         }
 
-    val str = vchar.repUntil(dquote).string.surroundedBy(dquote)
+    val str: Parser[FieldValue] =
+      vchar.repUntil(dquote).string.surroundedBy(dquote)
 
-    val int = signedIntString.map(_.toInt)
+    val int: Parser[FieldValue] = signedIntString.map(_.toInt)
 
-    val double =
+    val double: Parser[FieldValue] =
       (signedIntString ~ (Parser.char('.') ~ digits).?).string
         .map(_.toDouble)
 
-    val fieldValue = str | int | double
+    val fieldValue: Parser[FieldValue] = str | int | double
 
     val notField = pchar('-') *> fieldName ~ pchar(':').as(Operator.Not)
 
     val fieldOp = fieldName ~ operator
 
     val clause = ((notField | fieldOp) ~ fieldValue).map {
-      case ((field, op), value) => Clause(field, op, value)
+      case ((field, op), value: String) => Clause(field, op, value)
+      case ((field, op), value: Int)    => Clause(field, op, value)
+      case ((field, op), value: Double) => Clause(field, op, value)
     }
 
     val and = (sp *> string("and") *> sp *> clause).map(r => And(_, r))
