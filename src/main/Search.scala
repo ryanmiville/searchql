@@ -2,10 +2,11 @@ package searchql
 
 import cats.parse.Parser
 import cats.parse.Parser.{string, char as pchar}
+import cats.parse.Numbers.{digits, signedIntString}
 import cats.parse.Rfc5234.*
 
 enum Search:
-  case Clause(field: FieldName, op: Operator, value: FieldValue)
+  case Clause[A](field: FieldName, op: Operator, value: A)
   case And(left: Search, right: Search)
   case Or(left: Search, right: Search)
 
@@ -13,14 +14,14 @@ enum Operator:
   case Eq, Not, Contains, Gt, Lt, Gteq, Lteq
 
 type FieldName = String
-type FieldValue = String
 
 object Search:
   def parse(query: String): Either[Parser.Error, Search] =
     parser.parseAll(query)
 
   private lazy val parser: Parser[Search] =
-    val fieldName = (alpha | pchar('_')).rep.string
+    val fieldName =
+      (alpha ~ (alpha | pchar('_') | digit).rep).string
 
     val operator =
       Parser
@@ -36,8 +37,13 @@ object Search:
 
     val str = vchar.repUntil(dquote).string.surroundedBy(dquote)
 
-    val num = string(digit.rep ~ (pchar('.') *> digit.rep).?)
-    val fieldValue = str | num
+    val int = signedIntString.map(_.toInt)
+
+    val double =
+      (signedIntString ~ (Parser.char('.') ~ digits).?).string
+        .map(_.toDouble)
+
+    val fieldValue = str | int | double
 
     val notField = pchar('-') *> fieldName ~ pchar(':').as(Operator.Not)
 
